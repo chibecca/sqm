@@ -1,0 +1,29 @@
+{
+  "name": "flooring-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Industrial flooring & coating recommendation and calculation platform",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @flooring/db generate",
+    "db:migrate": "pnpm --filter @flooring/db migrate:dev",
+    "db:seed": "pnpm --filter @flooring/db seed",
+    "db:studio": "pnpm --filter @flooring/db studio",
+    "migrate:excel": "cd scripts/migrate-excel && python3 -m src.migrate",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "prettier": "^3.2.0",
+    "@types/node": "^20.11.0"
+  }
+}
