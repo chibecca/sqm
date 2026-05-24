@@ -2,109 +2,114 @@
 
 Industrial flooring & coating recommendation and calculation platform, built around a boolean compatibility-rule engine extracted from an existing Excel knowledge base.
 
-## Current status — Phase 1 (Foundation) ✅
+## Current status
 
-| Component | Status |
-|---|---|
-| Monorepo skeleton | ✅ Done |
-| Prisma schema (full data model) | ✅ Done |
-| Excel migration script | ✅ Done — runs cleanly, produces validated SQL/JSON |
-| Database package | ✅ Skeleton ready |
-| NestJS backend | 🔜 Phase 2 |
-| Rule engine endpoint | 🔜 Phase 2 |
-| Next.js frontend | 🔜 Phase 3 |
-| Calculation engine | 🔜 Phase 3 |
-| Exports | 🔜 Phase 4 |
+| Phase | Status | What's in it |
+|---|---|---|
+| **1 — Foundation** | ✅ Done | Monorepo skeleton, Prisma schema (16 tables), Excel migration script (validated against real data) |
+| **2 — Backend API** | ✅ Done | NestJS API with auth, the rule engine, parameter tree, projects CRUD, parameter selections, full test suite |
+| **3 — Layer builder & calculator** | 🔜 Next | Calculation engine, layer/item CRUD, autosave |
+| **4 — Exports & persistence** | 🔜 | PDF/XLSX exports, versions, audit log |
+| **5 — Frontend** | 🔜 | Next.js app, wizard UI |
 
-## Repo structure
+## Repository structure
 
 ```
 flooring-platform/
 ├── apps/
-│   ├── api/                     ← NestJS backend (Phase 2)
-│   └── web/                     ← Next.js frontend (Phase 3)
+│   ├── api/                          ← NestJS backend (Phase 2 ✅)
+│   │   ├── src/
+│   │   │   ├── auth/                  ← register / login / JWT / guards
+│   │   │   ├── common/                ← Zod pipe, envelope, exception filter
+│   │   │   ├── config/                ← env loader with Zod validation
+│   │   │   ├── database/              ← Prisma module
+│   │   │   ├── parameters/            ← parameter tree endpoint
+│   │   │   ├── recommendations/       ← THE RULE ENGINE
+│   │   │   ├── projects/              ← project CRUD
+│   │   │   ├── parameter-selections/  ← per-project parameter storage
+│   │   │   ├── app.module.ts
+│   │   │   └── main.ts
+│   │   └── README.md
+│   └── web/                          ← Next.js (Phase 5)
 ├── packages/
-│   ├── db/                      ← Prisma schema + client
-│   │   └── prisma/schema.prisma  ← Full data model (16 tables)
-│   ├── validation/              ← Shared Zod schemas (Phase 2)
-│   ├── types/                   ← Shared TypeScript types
-│   └── calculation-engine/      ← Pure calc functions (Phase 3)
-└── scripts/
-    └── migrate-excel/           ← One-time Excel → DB migration ✅
-        ├── src/
-        │   ├── migrate.py        ← entry point
-        │   ├── header_parser.py  ← rows 1–5 → parameters
-        │   ├── product_parser.py ← rows 6+ → products + compatibility
-        │   ├── price_parser.py   ← prices + colors
-        │   ├── normalize.py      ← all naming/contamination cleanup rules
-        │   └── sql_emitter.py    ← produces seed.sql
-        └── output/
-            ├── seed_data.json   ← 732 KB structured JSON
-            ├── seed.sql         ← 186 KB PostgreSQL seed (8,795 INSERT rows)
-            └── migration_report.md
+│   ├── db/                            ← Prisma schema + client
+│   ├── validation/                    ← Shared Zod schemas (TS source of truth)
+│   ├── types/                         ← Shared TypeScript types
+│   └── calculation-engine/            ← Pure calc functions (Phase 3)
+├── scripts/
+│   └── migrate-excel/                 ← Excel → seed.sql (Phase 1)
+├── docker-compose.yml                 ← Postgres + Redis for local dev
+├── turbo.json
+├── pnpm-workspace.yaml
+└── tsconfig.base.json
 ```
-
-## What's in the database after migration
-
-| Table | Rows | Notes |
-|---|---|---|
-| `parameters` | **121** | Full 5-level hierarchical taxonomy |
-| `product_groups` | **43** | EP/PU/PMMA/PUCEM/Mastic/etc. with chemistry + application type |
-| `products` | **686** | After deduplication (was 774 in raw Excel) |
-| `compatibility` | **7,378** | Sparse positive-only matrix (8.9% density) |
-| `price_list_items` | **403** | Matched STO 2024 prices |
-| `colors` | **163** | 26 PG11 + 137 PG12 RAL codes |
 
 ## Verified rule engine behavior
 
-A query for `medium mechanical load + concrete + no contamination + grinding` returns **66 compatible products across 26 product groups** — exactly the universe a flooring contractor would expect for that scenario.
+After loading the seed data, the rule engine produces:
+- `medium load + concrete + no contamination + grinding` → **66 products across 26 groups**
+- `extreme load + PVC anti-slip oily + base_cleaning` → **3 products**
+- Multi-substrate AND filtering works per clarification #6
+- K5 datetime bug already fixed at the seed stage
 
-A restrictive query for `extreme load + PVC anti-slip oily + base_cleaning` correctly returns only **3 products** — strict AND filtering works.
-
-## Setup (run order)
+## Setup
 
 ```bash
-# 1. Install root dependencies
+# 1. Install root dependencies (Phase 2 added many)
 pnpm install
 
-# 2. Start PostgreSQL (locally or via Docker)
-docker run --name flooring-pg -e POSTGRES_PASSWORD=devpass -p 5432:5432 -d postgres:16
+# 2. Start Postgres + Redis
+docker compose up -d
 
-# 3. Configure connection
-cat > packages/db/.env <<EOF
+# 3. Configure DB connection for Prisma
+cat > packages/db/.env <<'ENV'
 DATABASE_URL="postgresql://postgres:devpass@localhost:5432/flooring_platform"
-EOF
+ENV
 
-# 4. Generate Prisma client and run migrations
+# 4. Generate Prisma client + apply schema
 pnpm db:generate
 pnpm db:migrate
 
-# 5. Run the Excel migration (Python — needs openpyxl)
+# 5. Run the Excel migration
 pip install -r scripts/migrate-excel/requirements.txt
 pnpm migrate:excel
 
-# 6. Load the generated seed.sql into PostgreSQL
+# 6. Load the seed data
 psql "postgresql://postgres:devpass@localhost:5432/flooring_platform" \
      -f scripts/migrate-excel/output/seed.sql
+
+# 7. Configure the API
+cp apps/api/.env.example apps/api/.env
+# IMPORTANT: edit apps/api/.env and set a real JWT_SECRET
+# (the default is < 32 chars and will fail the config check)
+# Generate one: openssl rand -base64 64
+
+# 8. Run the API
+pnpm --filter @flooring/api dev
 ```
 
-After step 6, the database is fully populated and ready for the API layer (Phase 2).
+The API will be at `http://localhost:3001/api/v1`. See `apps/api/README.md` for endpoint reference and smoke-test curl commands.
 
-## Next: Phase 2 — Backend API
+## Test suite
 
-The next coding session will deliver:
-- NestJS application with module structure
-- Auth module (JWT)
-- Parameters endpoint (returns the hierarchical tree)
-- Recommendations endpoint (the rule engine)
-- Projects CRUD
-- Parameter selection storage
-- Zod-based validation
+```bash
+# Validation package — Zod schema rules
+pnpm --filter @flooring/validation test
 
-## Data model decisions worth knowing
+# API — rule engine, parameter resolver, controllers
+pnpm --filter @flooring/api test
+```
 
-- **All money columns are `NUMERIC(12,2)`** — never floats.
-- **Compatibility is positive-only** — absence of a row means "not compatible / not applicable", not a stored FALSE.
-- **`row_order` is preserved** for products — keeps the original Excel ordering for snapshot/export traceability.
-- **Soft deletes** on Projects, Users, Organizations.
-- **Optimistic locking** via `version` column on Calculations (prevents racing autosaves).
+Tests run against mocked Prisma — no DB required. There are 16 unit tests covering:
+- Parameter resolution (multi-select, multi-substrate, dedup, missing keys)
+- Rule engine query shape (Prisma.sql parameters, grouping, ordering)
+- Decimal-to-number conversion
+- Validation rules (texture required/forbidden per substrate, valid preparations)
+
+## Next: Phase 3 — Calculation Engine
+
+- `packages/calculation-engine` — pure functions, Decimal.js precision
+- Calculation, Layer, LayerItem, ToolItem, LaborItem entities
+- Layer/item CRUD endpoints
+- Autosave with optimistic locking on `Calculation.version`
+- Calculation test suite from architecture Appendix A

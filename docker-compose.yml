@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flooring-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: flooring_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - flooring-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: flooring-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - flooring-redis-data:/data
+
+volumes:
+  flooring-pg-data:
+  flooring-redis-data:
